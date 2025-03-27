@@ -6,9 +6,8 @@ import authRoutes from "./routes/auth_route";
 
 const app = express();
 app.use(express.json());
-
 app.use("api/posts/", postRoutes);
 app.use("api/follow/", followRoutes);
 app.use("api/comment/", commentRoutes);
-app.use("api/auth/", authRoutes);
+app.use("/api/auth", authRoutes);
 export default app;
