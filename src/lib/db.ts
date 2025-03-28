@@ -1,6 +1,5 @@
 import dotenv from "dotenv";
 import mongoose from "mongoose";
-import { deflate } from "zlib";
 dotenv.config();
 const connectDB = async () => {
   try {
