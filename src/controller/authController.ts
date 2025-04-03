@@ -18,7 +18,11 @@ export const registerUser = async (
     const hashedPassword = await hash(password, saltRound);
     console.log(`Hashed password ${hashedPassword}`);
 
-    const user = new User({ email, username, password });
+    console.log(`Comparing: ${password} vs ${hashedPassword}`);
+    const isMatch = await compare(password, hashedPassword);
+    console.log(`Password match: ${isMatch}`); // Should be true
+
+    const user = new User({ email, username, password: hashedPassword });
     await user.save();
     const tokens = generateTokens({ userId: user.id });
     res.status(201).json({
@@ -46,12 +50,13 @@ export const loginUser = async (req: Request, res: Response): Promise<any> => {
     if (!isMatch) {
       throw new LoginError("Invalid credentials", 403);
     }
+    await User.updateOne({ email }, { $set: { isLocked: false } });
 
     if (user.isLocked) {
       throw new LoginError("Account temporarily locked", 401);
     }
 
-    const token = generateTokens({ userId: user._id, role: "user" });
+    // const token = generateTokens({ userId: user._id, role: "user" });
     res.status(201).json({ id: user._id, email: user.email, role: "user" });
   } catch (error) {
     // Handle specific error types
