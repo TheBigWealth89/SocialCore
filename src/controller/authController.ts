@@ -1,7 +1,11 @@
 import { Request, Response } from "express";
 import User from "../models/user";
 import { hash, compare } from "bcrypt";
-import { generateTokens } from "../utils/tokenUtils";
+import {
+  generateTokens,
+  isTokenBlacklisted,
+  addBlacklist,
+} from "../utils/tokenUtils";
 import { LoginError } from "../error/customErrors";
 export const registerUser = async (
   req: Request,
@@ -56,8 +60,10 @@ export const loginUser = async (req: Request, res: Response): Promise<any> => {
       throw new LoginError("Account temporarily locked", 401);
     }
 
-    // const token = generateTokens({ userId: user._id, role: "user" });
-    res.status(201).json({ id: user._id, email: user.email, role: "user" });
+    const token = generateTokens({ userId: user._id, role: "user" });
+    res
+      .status(201)
+      .json({ user: { id: user._id, email: user.email, role: "user" }, token });
   } catch (error) {
     // Handle specific error types
     if (error instanceof LoginError) {
@@ -75,5 +81,47 @@ export const loginUser = async (req: Request, res: Response): Promise<any> => {
           ? (error as Error).message
           : "Authentication failed",
     });
+  }
+};
+
+export const logoutUser = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const authHeader = req.header("Authorization");
+    const token = authHeader?.replace("Bearer", "");
+
+    if (!token) {
+      res.status(401).json({ error: "Token not provided" });
+      return;
+    }
+
+    if (token && isTokenBlacklisted(token.trim())) {
+      res.status(400).json({ error: "Token already invalidated" });
+      return;
+    }
+    //invalidate the token
+    if (token) {
+      addBlacklist(token.trim());
+    } else {
+      res.json({ error: "Token not valid" });
+    }
+
+    const userId = req.body.userId; // Assuming userId is passed in the request body
+    if (userId) {
+      await User.findByIdAndUpdate(userId, {
+        $unset: { refreshToken: "" },
+      });
+    }
+    res.clearCookie("access_token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+    res.status(201).json({ message: "Successfully logged out " });
+  } catch (error) {
+    console.error("Logout error", error);
+    res.status(500).json({ error: "Logout failed" });
   }
 };
