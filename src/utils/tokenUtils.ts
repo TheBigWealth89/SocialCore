@@ -1,4 +1,4 @@
-import { ObjectId, Types } from "mongoose";
+import { Types } from "mongoose";
 import jwt, { SignOptions } from "jsonwebtoken";
 import config from "../config/config";
 
@@ -13,21 +13,6 @@ interface TokenPair {
 }
 
 //Generate (access + refresh)
-// export const generateToken = (payload: TokenPayload): TokenPair => {
-//   if (!config.jwt.accessTokenSecret || !config.jwt.refreshTokenSecret) {
-//     throw new Error("JWT secrets are not configured");
-//   }
-//   const accessToken = jwt.sign(
-//     payload, // Data to store
-//     config.jwt.accessTokenSecret!,
-//     { expiresIn: config.jwt.accessTokenExpiry }
-//   );
-//   const refreshToken = jwt.sign(payload, config.jwt.refreshTokenSecret!, {
-//     expiresIn: config.jwt.refreshTokenExpiry,
-//   });
-//   return { accessToken, refreshToken };
-// };
-
 export const generateTokens = (payload: TokenPayload): TokenPair => {
   if (!config.jwt.accessTokenSecret || !config.jwt.refreshTokenSecret) {
     throw new Error("err");
@@ -84,12 +69,14 @@ export const verifyResetToken = (token: string): TokenPayload => {
   return jwt.verify(token, config.jwt.resetTokenSecret!) as TokenPayload;
 };
 
-//Token blacklistManagement
+//Token blacklistManagement using Redis
 const tokenBlacklist = new Set<string>();
-export const addBlacklist = (token: string) => {
+
+export const addToBlacklist = (token: string) => {
   tokenBlacklist.add(token);
 };
 
 export const isTokenBlacklisted = (token: string): boolean => {
+  console.log(tokenBlacklist);
   return tokenBlacklist.has(token);
 };

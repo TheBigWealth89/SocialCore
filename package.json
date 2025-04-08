@@ -5,7 +5,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/app.js",
-    "dev": "ts-node src/app.ts",
+    "dev": " nodemon src/app.ts",
     "dev:watch": "nodemon --watch 'src/**/*.ts'  src/app.ts"
   },
   "keywords": [],
@@ -15,6 +15,7 @@
   "devDependencies": {
     "@types/express": "^5.0.1",
     "@types/jsonwebtoken": "^9.0.9",
+    "@types/redis": "^4.0.10",
     "nodemon": "^3.1.9",
     "typescript": "^5.8.2"
   },
@@ -24,8 +25,11 @@
     "bcrypt": "^5.1.1",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "ioredis": "^5.6.0",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.15.0",
-    "mongoose": "^8.13.0"
+    "mongoose": "^8.13.0",
+    "redis": "^4.7.0"
   }
 }
