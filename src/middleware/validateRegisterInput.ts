@@ -1,8 +1,15 @@
 import { Request, Response, NextFunction } from "express";
-import BlacklistedToken from "../models/blacklistTokenschem";
 
-// import { addBlacklist } from "../utils/tokenUtils";
+declare global {
+  namespace Express {
+    interface Request {
+      user?: { [key: string]: any };
+    }
+  }
+}
 
+import jwt from "jsonwebtoken";
+import { verifyAccessToken, verifyRefreshToken } from "../utils/tokenUtils";
 export const registerInput = (
   req: Request,
   res: Response,
@@ -56,6 +63,7 @@ export const registerInput = (
   next(); // Proceed to the next middleware or controller
 };
 
+// Login middleware
 export const loginInput = (req: Request, res: Response, next: NextFunction) => {
   const { email, password } = req.body;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -72,69 +80,90 @@ export const loginInput = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-export const verifyAuthForLogout = async (
+export const authMiddleware = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const token =
-    req.header("Authorization")?.replace("Bearer ", "") ||
-    req.cookies.access_token;
-  if (!token) {
-    res.status(401).json({ message: "No token provided" });
-    return;
-  }
-  try {
-    const isBlacklisted = await BlacklistedToken.exists({ token });
-    if (isBlacklisted) {
-      res.status(401).json({ error: "Token revoke" });
+  // Track if we've sent a response
+  let responseSent = false;
+
+  const sendResponse = (status: number, data: any): void => {
+    if (!responseSent) {
+      responseSent = true;
+      res.status(status).json(data);
     }
-    next();
-  } catch (error) {
-    console.error(error);
+  };
+
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      sendResponse(401, { message: "Authorization header missing" });
+      return;
+    }
+
+    const token = authHeader.split(" ")[1];
+    if (!token) {
+      sendResponse(401, { message: "Access token missing" });
+      return;
+    }
+
+    const decoded = (await verifyAccessToken(token)) as { [key: string]: any };
+
+    if (!decoded) {
+      sendResponse(401, { message: "Invalid token or blacklisted" });
+    }
+    req.user = decoded;
+
+    // Only proceed if we haven't sent a response
+    if (!responseSent) {
+      next();
+    }
+  } catch (err) {
+    if (responseSent) return;
+
+    const message =
+      err instanceof jwt.TokenExpiredError
+        ? {
+            message: "Token expired",
+            expiredAt: (err as jwt.TokenExpiredError).expiredAt,
+          }
+        : {
+            message: "Invalid token",
+            error: err instanceof Error ? err.message : "Unknown error",
+          };
+
+    sendResponse(401, message);
   }
-
-  //Then we have to check if token is blacklisted
-
-  //Checks redis for blacklisted token
-  // async () => {
-  //   try {
-  //     const isTokenBlacklisted = await redisClient.get(`Blacklist: ${token}`);
-  //     if (isTokenBlacklisted) {
-  //       res.status(401).json({ error: "Token revoked" });
-  //       return;
-  //     }
-  //   } catch (error) {
-  //     console.error(error);
-  //   }
-  // };
 };
 
-/* 
- import { body, validationResult } from "express-validator";
-import { Request, Response, NextFunction } from "express";
-export const registerInput = [
-  //Email validation
-  body("email").isEmail().withMessage("Invalid email format").normalizeEmail(),
+// export const validateRefreshToken = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction
+// ): Promise<any> => {
+//   try {
+//       const token = req.cookies.refreshToken;
+//       if (!token) {
+//           return res.status(401).json({ error: "Refresh token is missing" });
+//       }
 
-  body("password")
-    .isLength({ min: 8 })
-    .withMessage("Password must be altest 8 characters")
-    .matches(/\d/)
-    .withMessage("password must contain a number"),
-  body("username")
-    .notEmpty()
-    .withMessage("Username is required")
-    .isAlphanumeric()
-    .withMessage("No special characters allowed"),
+//       // Verify token signature and expiration
+//       const decoded = await verifyRefreshToken(token);
+//       if (!decoded) {
+//           return res.status(401).json({ error: "Invalid refresh token" });
+//       }
 
-  (req: Request, res: Response, next: NextFunction) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ error: errors.array() });
-    }
-    next();
-  },
-];
+//       // Check if token exists in database
+//       const tokenData = await RefreshToken.findOne({ token });
+//       if (!tokenData) {
+//           return res.status(401).json({ error: "Refresh token not found" });
+//       }
 
- */
+//       req.user = decoded;
+//       next();
+//   } catch (error) {
+//       console.error("Refresh token validation error:", error);
+//       return res.status(500).json({ error: "Internal server error" });
+//   }
+// };

@@ -1,16 +1,27 @@
 import { Router } from "express";
-import post from "../models/post";
+import postController from "../controller/postController";
+import { authMiddleware } from "../middleware/validateRegisterInput";
 const postRouter = Router();
-//create a new post
-postRouter.post("/");
 
-//get a specfic post
-postRouter.get("/:id");
+//**** create a new post *****/
+postRouter.use(authMiddleware);
+postRouter.post("/", postController.createPost);
 
-//update by id
-postRouter.put("/:id");
+//****Get all posts *****/
+postRouter.get("/", postController.getAllPosts);
 
-//delete post by id
-postRouter.delete("/:id");
+//**** Get a specific post  *****
+postRouter.get("/:id", postController.getPostById);
+
+//**** Update by id *****/
+postRouter.put("/:id", postController.updatePost);
+
+//**** Delete post by id *****/
+postRouter.delete("/:id", postController.deletePost);
+
+//****Like Posts  *****/
+postRouter.post("/:id/like", postController.likePost);
+//**** Unlike posts *****/
+postRouter.post("/:id/unlike", postController.unlikePost);
 
 export default postRouter;

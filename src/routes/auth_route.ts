@@ -1,21 +1,22 @@
 import { Router } from "express";
-import {
-  registerUser,
-  loginUser,
-  logoutUser,
-} from "../controller/authController";
+import authController from "../controller/authController";
 
 import {
   registerInput,
   loginInput,
-  verifyAuthForLogout,
+  authMiddleware,
 } from "../middleware/validateRegisterInput";
-const authRouter = Router();
 
-authRouter.post("/register", registerInput, registerUser);
-authRouter.post("/login", loginInput, loginUser);
-authRouter.post("/logout", verifyAuthForLogout, logoutUser);
-authRouter.post("/refresh-token");
+const authRouter = Router();
+//**** signUp route *****/
+authRouter.post("/register", registerInput, authController.signup);
+//**** login route *****/
+authRouter.post("/login", loginInput, authController.login);
+//**** logout route *****/
+authRouter.post("/logout", authMiddleware, authController.logout);
+//**** token rotation route *****/
+authRouter.post("/refresh", authController.refresh);
+//**** retrieve user data route  *****/
 authRouter.get("/me");
 
 export default authRouter;

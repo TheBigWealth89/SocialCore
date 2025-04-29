@@ -1,212 +1,203 @@
 import { Request, Response, NextFunction } from "express";
 import User from "../models/user";
 import { hash, compare } from "bcrypt";
-
+import jwt from "jsonwebtoken";
 import {
   generateTokens,
-  isTokenBlacklisted,
   addToBlacklist,
+  removeRefreshToken,
+  verifyRefreshToken,
+  saveRefreshToken,
 } from "../utils/tokenUtils";
+import config from "../config/config";
+import RefreshToken from "../models/RefreshToken";
 import { LoginError } from "../error/customErrors";
 
-export const registerUser = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  const { username, email, password } = req.body;
-  try {
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      res.status(400).json({ error: "User already exists!" });
-      return;
+/**
+ *
+ *
+ * @class authController
+ */
+class authController {
+  // Register user
+  async signup(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const { username, email, password } = req.body;
+    try {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        res.status(400).json({ error: "User already exists!" });
+        return;
+      }
+
+      const saltRound = 10;
+      const hashedPassword = await hash(password, saltRound);
+      console.log(`Hashed password ${hashedPassword}`);
+
+      console.log(`Comparing: ${password} vs ${hashedPassword}`);
+      const isMatch = await compare(password, hashedPassword);
+      console.log(`Password match: ${isMatch}`); // Should be true
+
+      const user = new User({ email, username, password: hashedPassword });
+      await user.save();
+      // const tokens = generateTokens({ userId: user.id });
+      res.status(201).json({
+        user: { id: user._id, email: user.email, username: user.username },
+      });
+    } catch (error) {
+      console.error("Register error", error);
+      next(error);
     }
-
-    const saltRound = 10;
-    ``;
-    const hashedPassword = await hash(password, saltRound);
-    console.log(`Hashed password ${hashedPassword}`);
-
-    console.log(`Comparing: ${password} vs ${hashedPassword}`);
-    const isMatch = await compare(password, hashedPassword);
-    console.log(`Password match: ${isMatch}`); // Should be true
-
-    const user = new User({ email, username, password: hashedPassword });
-    await user.save();
-    const tokens = generateTokens({ userId: user.id });
-    res.status(201).json({
-      user: { id: user._id, email: user.email, username: user.username },
-      tokens,
-    });
-  } catch (error) {
-    console.error("Register error", error);
-    next(error);
   }
-};
 
-//login
-export const loginUser = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<any> => {
-  const { email, password } = req.body;
-  try {
-    if (!email || !password) {
-      throw new LoginError("Email and Password are required", 400);
-    }
+  //Login user
+  async login(req: Request, res: Response): Promise<any> {
+    const { email, password } = req.body;
+    try {
+      if (!email || !password) {
+        throw new LoginError("Email and Password are required", 400);
+      }
 
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) {
-      throw new LoginError("Invalid credentials", 401);
-    }
-    const isMatch = await compare(password, user.password);
-    if (!isMatch) {
-      throw new LoginError("Invalid credentials", 403);
-    }
-    await User.updateOne({ email }, { $set: { isLocked: false } });
+      const user = await User.findOne({ email }).select("+password");
+      if (!user) {
+        throw new LoginError("Invalid credentials", 401);
+      }
+      const isMatch = await compare(password, user.password);
+      if (!isMatch) {
+        throw new LoginError("Invalid credentials", 403);
+      }
+      await User.updateOne({ email }, { $set: { isLocked: false } });
 
-    if (user.isLocked) {
-      throw new LoginError("Account temporarily locked", 401);
-    }
+      if (user.isLocked) {
+        throw new LoginError("Account temporarily locked", 401);
+      }
 
-    const token = generateTokens({ userId: user._id, role: "user" });
-    res
-      .status(201)
-      .json({ user: { id: user._id, email: user.email, role: "user" }, token });
+      // Generate tokens with proper expiration
+      const tokens = generateTokens({ userId: user._id, role: "user" });
 
-    // const { refreshToken } = generateTokens({ userId: user._id, role: "user" });
-    // await redisClient.setEx(
-    //   `refresh:${user._id}`,
-    //   7 * 24 * 3600, // 7 days
-    //   refreshToken
-    // );
-  } catch (error) {
-    next(error);
+      await saveRefreshToken(user._id, tokens.refreshToken);
+      res.cookie("refreshToken", tokens.refreshToken, config.jwt.cookieOptions);
 
-    // Handle specific error types
-    if (error instanceof LoginError) {
-      return res.status(error.statusCode).json({
-        error: error.message,
-        code: error.statusCode,
+      res.status(201).json({
+        user: { id: user._id, email: user.email, role: "user" },
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      });
+    } catch (error) {
+      if (error instanceof LoginError) {
+        return res.status(error.statusCode).json({
+          error: error.message,
+          code: error.statusCode,
+        });
+      }
+
+      console.error("Login error:", error);
+      res.status(500).json({
+        error:
+          process.env.NODE_ENV === "development"
+            ? (error as Error).message
+            : "Authentication failed",
       });
     }
-
-    console.error("Login error:", error);
-    res.status(500).json({
-      error:
-        process.env.NODE_ENV === "development"
-          ? (error as Error).message
-          : "Authentication failed",
-    });
   }
-};
 
-export const logoutUser = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    // 1. Get and validate Authorization header
-    const authHeader = req.header("Authorization");
-    console.log("Authorization Header:", authHeader); // Debug log
+  // Logout user
+  async logout(req: Request, res: Response): Promise<any> {
+    // Track response
+    let responseSent = false;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      res
-        .status(401)
-        .json({ error: "Authorization header missing or malformed" });
-      return;
-    }
+    const sendResponse = (status: number, data: any) => {
+      if (!responseSent) {
+        responseSent = true;
+        return res.status(status).json(data);
+      }
+      return null;
+    };
 
-    // 2. Extract and clean token
-    const token = authHeader.replace("Bearer ", "").trim();
-    console.log("Extracted Token:", token); // Debug log
+    try {
+      const token = req.headers.authorization?.split(" ")[1];
 
-    if (!token) {
-      res.status(401).json({ error: "Token not provided" });
-      return;
-    }
+      if (!token) {
+        return sendResponse(401, { message: "Token missing" });
+      }
 
-    // 3. Verify token structure first (quick check)
-    if (token.split(".").length !== 3) {
-      res.status(401).json({ error: "Invalid token structure" });
-      return;
-    }
+      // Perform logout operations
+      await addToBlacklist(token);
 
-    // let decoded;
-    // try {
-    //   if (!process.env.ACCESS_TOKEN_SECRET) {
-    //     throw new Error("ACCESS_TOKEN_SECRET is not configured");
-    //   }
+      // Remove the refresh token
+      const { refreshToken } = req.cookies;
+      if (refreshToken) {
+        await removeRefreshToken(refreshToken);
+        res.clearCookie("refreshToken");
+      }
 
-    //   decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, {
-    //     ignoreExpiration: true,
-    //   });
-    //   console.log("Decoded Token:", decoded); // Debug log
-    // } catch (err) {
-    //   console.error("Token Verification Error:", err);
-
-    //   if (err instanceof jwt.JsonWebTokenError) {
-    //     res.status(401).json({
-    //       error: "Invalid token",
-    //       details: err.message,
-    //     });
-    //     return;
-    //   }
-    //   throw err;
-    // }
-
-    // Check if already blacklisted
-    if (isTokenBlacklisted(token)) {
-      res.status(400).json({ error: "Already logged out" });
-      return;
-    }
-
-    // Rest of your logout logic...
-    addToBlacklist(token);
-
-    // await BlacklistedToken.create({
-    //   token,
-    //   expiresAt:
-    //     typeof decoded !== "string" && decoded.exp
-    //       ? new Date(decoded.exp * 1000)
-    //       : null,
-    // });
-
-    const userId = req.body.userId;
-    if (userId) {
-      await User.findByIdAndUpdate(userId, {
-        $unset: { refreshToken: "" },
+      // This will be the ONLY response
+      return sendResponse(200, { message: "Successfully logged out" });
+    } catch (err) {
+      return sendResponse(500, {
+        message: "Logout failed",
+        error: err instanceof Error ? err.message : "Unknown error",
       });
     }
-
-    res.clearCookie("access_token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
-
-    res.status(200).json({ message: "Successfully logged out" });
-    return;
-  } catch (error) {
-    console.error("Logout error:", error);
-    next(error);
   }
-};
-// Check Redis client connection
-// if (!redisClient.isReady) {
-//   console.error("Redis client is not connected");
-//   res.status(503).json({ error: "Service temporarily unavailable" });
-//   return;
-// }
 
-// const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRECT!);
-// if (typeof decoded !== "string" && decoded.exp) {
-//   const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-//   await redisClient.setEx(
-//     `blacklist:${token}`,
-//     expiresIn > 0 ? expiresIn : 3600,
-//     "revoked"
-//   );
-// }
+  //refresh
+  async refresh(req: Request, res: Response): Promise<any> {
+    console.log("\n=== REFRESH TOKEN REQUEST STARTED ===");
+
+    // 1. Get token from cookie (or header if you prefer)
+    const authHeader = req.headers.authorization;
+    const headerToken = authHeader?.startsWith("Bearer ")
+      ? authHeader.split(" ")[1]
+      : null;
+    const cookieToken = req.cookies.refreshToken;
+    const oldToken = headerToken || cookieToken;
+
+    console.log("Using refresh token:", oldToken);
+
+    console.log("Incoming refresh token:", oldToken?.substring(0, 20) + "...");
+
+    if (!oldToken) {
+      console.log("No refresh token provided");
+      return res.status(401).json({ error: "Refresh token required" });
+    }
+    console.log("Header refreshToken:", req.headers["authorization"]);
+    console.log("Cookie refreshToken:", req.cookies.refreshToken);
+
+    try {
+      // 2. Verify THE PROVIDED TOKEN ONLY
+      const decoded = await verifyRefreshToken(oldToken);
+      if (!decoded?.userId) {
+        console.log("Invalid or expired refresh token");
+        return res.status(401).json({ error: "Invalid refresh token" });
+      }
+
+      // 3. Generate new tokens
+      console.log("Generating new tokens...");
+      const tokens = generateTokens({
+        userId: decoded.userId,
+        role: decoded.role || "user",
+      });
+
+      // 4. Save new refresh token (invalidates old one)
+      console.log("Saving new refresh token...");
+      await RefreshToken.create({
+        user: decoded.userId,
+        token: tokens.refreshToken,
+      });
+
+      // 5. Set new cookie
+      console.log("Setting new cookie...");
+      res.cookie("refreshToken", tokens.refreshToken, config.jwt.cookieOptions);
+
+      console.log("=== REFRESH SUCCESSFUL ===");
+      return res.json({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken, // For clients that don't use cookies
+      });
+    } catch (error) {
+      console.error("Refresh error:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+}
+export default new authController();

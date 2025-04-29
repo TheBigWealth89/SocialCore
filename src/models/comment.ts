@@ -6,7 +6,7 @@ const commentSchema = new mongoose.Schema(
       required: true,
       trim: true,
       max: 500,
-      validate: { validator: (V) => V.trim.length > 0 },
+      validate: { validator: (V) => V.trim().length > 0 },
       message: "comment cannot be empty",
     },
     userId: {
@@ -19,10 +19,10 @@ const commentSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    likes: { type: Number, default: 0, min: 0 },
-    satus: {
+    likes: [{ type: Number, default: 0, min: 0 }],
+    status: {
       type: String,
-      enum: ["active, delete, flagged"],
+      enum: ["active", "deleted", "flagged"],
       default: "active",
     },
     createdAt: { type: Date, default: Date.now, immutable: true },
@@ -39,4 +39,4 @@ const commentSchema = new mongoose.Schema(
 //   return `comments/${this._id}`;
 // });
 
-export default mongoose.model("comment", commentSchema);
+export default mongoose.model("Comment", commentSchema);
