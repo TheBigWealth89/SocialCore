@@ -4,6 +4,7 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import config from "../config/config";
 import RedisService from "../services/redis.services";
 import RefreshToken from "../models/RefreshToken";
+import crypto from "crypto";
 interface TokenPayload {
   userId: Types.ObjectId;
   role?: string; //user or admin
@@ -27,17 +28,12 @@ export const generateTokens = (payload: TokenPayload): TokenPair => {
     iat: Math.floor(Date.now() / 1000), // Issued at
   };
 
-  //Debugging console
-
   const accessTokenOptions: SignOptions = {
-    // expiresIn: "15m",
-    // expiresIn: parseInt(config.jwt.jwt_access_expiry) * 60,
     expiresIn: "15m",
   };
 
   const refreshTokenOptions: SignOptions = {
     expiresIn: "7d",
-    // expiresIn: parseInt(config.jwt.jwt_refresh_expiry),
   };
 
   const accessToken = jwt.sign(fullPayload, config.jwt.ACCESS_SECRET, {
@@ -73,33 +69,6 @@ export const generateTokens = (payload: TokenPayload): TokenPair => {
   return { accessToken, refreshToken };
 };
 
-// export const saveRefreshToken = async (
-//   userId: Types.ObjectId,
-//   refreshToken: string
-// ) => {
-//   // Delete ALL existing tokens for this user first
-//   await RefreshToken.deleteMany({ user: userId });
-//   // Create new token record
-//   const newToken = await RefreshToken.create({
-//     user: userId,
-//     token: refreshToken,
-//   });
-//   return newToken;
-// };
-
-export const saveRefreshToken = async (
-  userId: Types.ObjectId,
-  refreshToken: string
-) => {
-  // Delete ALL existing tokens for this user first (optional - depends on your needs)
-  await RefreshToken.deleteMany({ user: userId });
-  // Create new token record
-  return await RefreshToken.create({
-    user: userId,
-    token: refreshToken,
-  });
-};
-
 export const removeRefreshToken = async (refreshToken: string) => {
   return RefreshToken.deleteOne({ token: refreshToken });
 };
@@ -126,6 +95,24 @@ export const verifyAccessToken = async (
   }
 };
 
+// Function hashed refresh token
+const hashedToken = (token: string): string => {
+  return crypto.createHash("sha256").update(token).digest("hex");
+};
+
+export const saveRefreshToken = async (
+  userId: Types.ObjectId,
+  refreshToken: string
+) => {
+  const hashed = hashedToken(refreshToken);
+  // Delete ALL existing tokens for this user first
+  await RefreshToken.deleteMany({ user: userId });
+  // Create new token record
+  return await RefreshToken.create({
+    user: userId,
+    token: "TEST_" + hashed,
+  });
+};
 export const verifyRefreshToken = async (
   token: string
 ): Promise<TokenPayload | null> => {
@@ -134,7 +121,7 @@ export const verifyRefreshToken = async (
     return null;
   }
 
-  // 1. First verify the JWT signature
+  // First verify the JWT signature
   let payload: TokenPayload;
   try {
     payload = jwt.verify(token, config.jwt.REFRESH_SECRET) as TokenPayload;
@@ -144,16 +131,19 @@ export const verifyRefreshToken = async (
     return null;
   }
 
-  // 2. Check if THIS EXACT TOKEN exists in database
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
+    const hashed = "TEST_" + hashedToken(token);
     // Critical change: Only look for the exact token string provided
-    const tokenDoc = await RefreshToken.findOneAndDelete({
-      token: token, // Exact match of the provided token
-      user: payload.userId // For additional security
-    }, { session });
+    const tokenDoc = await RefreshToken.findOneAndDelete(
+      {
+        token: hashed,
+        user: payload.userId,
+      },
+      { session }
+    );
 
     if (!tokenDoc) {
       console.log("EXACT token not found in database");
@@ -161,7 +151,6 @@ export const verifyRefreshToken = async (
       return null;
     }
 
-    console.log("Token found and deleted from database");
     await session.commitTransaction();
     return payload;
   } catch (err) {

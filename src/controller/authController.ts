@@ -18,7 +18,7 @@ import { LoginError } from "../error/customErrors";
  *
  * @class authController
  */
-class authController {
+class AuthController {
   // Register user
   async signup(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { username, email, password } = req.body;
@@ -142,13 +142,11 @@ class authController {
 
   //refresh
   async refresh(req: Request, res: Response): Promise<any> {
-    console.log("\n=== REFRESH TOKEN REQUEST STARTED ===");
-
-    // 1. Get token from cookie (or header if you prefer)
     const authHeader = req.headers.authorization;
     const headerToken = authHeader?.startsWith("Bearer ")
       ? authHeader.split(" ")[1]
       : null;
+
     const cookieToken = req.cookies.refreshToken;
     const oldToken = headerToken || cookieToken;
 
@@ -157,47 +155,42 @@ class authController {
     console.log("Incoming refresh token:", oldToken?.substring(0, 20) + "...");
 
     if (!oldToken) {
-      console.log("No refresh token provided");
       return res.status(401).json({ error: "Refresh token required" });
     }
     console.log("Header refreshToken:", req.headers["authorization"]);
     console.log("Cookie refreshToken:", req.cookies.refreshToken);
 
+    const tokens = await RefreshToken.find({});
+    tokens.forEach((doc) => {
+      console.log("Stored token😋:", doc.token);
+    });
+
     try {
-      // 2. Verify THE PROVIDED TOKEN ONLY
+      //Verify THE PROVIDED TOKEN ONLY
       const decoded = await verifyRefreshToken(oldToken);
       if (!decoded?.userId) {
-        console.log("Invalid or expired refresh token");
         return res.status(401).json({ error: "Invalid refresh token" });
       }
 
-      // 3. Generate new tokens
-      console.log("Generating new tokens...");
+      //Generate new tokens
       const tokens = generateTokens({
         userId: decoded.userId,
         role: decoded.role || "user",
       });
 
-      // 4. Save new refresh token (invalidates old one)
-      console.log("Saving new refresh token...");
-      await RefreshToken.create({
-        user: decoded.userId,
-        token: tokens.refreshToken,
-      });
+      //Save new refresh token (invalidates old one)
+      await saveRefreshToken(decoded.userId, tokens.refreshToken);
 
-      // 5. Set new cookie
-      console.log("Setting new cookie...");
+      //Set new cookie
       res.cookie("refreshToken", tokens.refreshToken, config.jwt.cookieOptions);
 
-      console.log("=== REFRESH SUCCESSFUL ===");
       return res.json({
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken, // For clients that don't use cookies
       });
     } catch (error) {
-      console.error("Refresh error:", error);
       return res.status(500).json({ error: "Internal server error" });
     }
   }
 }
-export default new authController();
+export default new AuthController();

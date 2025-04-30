@@ -1,21 +1,16 @@
 import { Router } from "express";
-import authController from "../controller/authController";
-
-import {
-  registerInput,
-  loginInput,
-  authMiddleware,
-} from "../middleware/validateRegisterInput";
+import AuthController from "../controller/authController";
+import Authentication, { authorization } from "../middleware/authMiddleware"
 
 const authRouter = Router();
 //**** signUp route *****/
-authRouter.post("/register", registerInput, authController.signup);
+authRouter.post("/register", Authentication.registerInput, AuthController.signup);
 //**** login route *****/
-authRouter.post("/login", loginInput, authController.login);
+authRouter.post("/login",Authentication.loginInput, AuthController.login);
 //**** logout route *****/
-authRouter.post("/logout", authMiddleware, authController.logout);
+authRouter.post("/logout", authorization, AuthController.logout);
 //**** token rotation route *****/
-authRouter.post("/refresh", authController.refresh);
+authRouter.post("/refresh", AuthController.refresh);
 //**** retrieve user data route  *****/
 authRouter.get("/me");
 
