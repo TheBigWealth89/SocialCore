@@ -1,8 +1,8 @@
 import { Router } from "express";
 import commentController from "../controller/commentController";
-import { authMiddleware } from "../middleware/validateRegisterInput";
+import { authorization } from "../middleware/authMiddleware";
 const commentRouter = Router();
-commentRouter.use(authMiddleware);
+commentRouter.use(authorization);
 // ******* post a new comment **********
 commentRouter.post("/:postId", commentController.createComment);
 
@@ -14,7 +14,7 @@ commentRouter.get("/:id", commentController.getCommentById);
 
 // ****** update a comment *****
 commentRouter.put("/:commentId", commentController.updateComment);
-  
+
 // ****** delete a comment  *****
 commentRouter.delete("/:commentId", commentController.deleteComment);
 

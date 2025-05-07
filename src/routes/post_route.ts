@@ -1,10 +1,10 @@
 import { Router } from "express";
 import postController from "../controller/postController";
-import { authMiddleware } from "../middleware/validateRegisterInput";
+import { authorization } from "../middleware/authMiddleware";
 const postRouter = Router();
 
 //**** create a new post *****/
-postRouter.use(authMiddleware);
+postRouter.use(authorization);
 postRouter.post("/", postController.createPost);
 
 //****Get all posts *****/

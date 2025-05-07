@@ -1,11 +1,12 @@
 import mongoose from "mongoose";
+import User from "./user"
 const followSchema = new mongoose.Schema(
   {
     //who is make the following
     follower: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "User",
+      ref: User,
       index: true,
     },
 
@@ -13,7 +14,7 @@ const followSchema = new mongoose.Schema(
     following: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "User",
+      ref: User,
       index: true,
     },
     createdId: {
@@ -24,17 +25,17 @@ const followSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["active, pendding, blocked"],
+      enum: ["active", "pending", "blocked"],
       default: "active",
     },
   },
   {
-    timestamps: true, //update createdId automativcally
+    timestamps: true, //update createdId automatically
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-followSchema.index({ folloer: 1, following: 1 }, { unique: true }); //prevent dupliacte following
-const follow = mongoose.model("follow", followSchema);
-export default follow;
+followSchema.index({ follower: 1, following: 1 }, { unique: true }); //prevent duplicate following
+const Follow = mongoose.model("Follow", followSchema);
+export default Follow;

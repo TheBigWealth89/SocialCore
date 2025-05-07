@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import User from "../models/user";
 import { hash, compare } from "bcrypt";
-import jwt from "jsonwebtoken";
 import {
   generateTokens,
   addToBlacklist,
@@ -16,7 +15,7 @@ import { LoginError } from "../error/customErrors";
 /**
  *
  *
- * @class authController
+ * @class AuthController
  */
 class AuthController {
   // Register user
@@ -186,7 +185,7 @@ class AuthController {
 
       return res.json({
         accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken, // For clients that don't use cookies
+        // refreshToken: tokens.refreshToken, // For clients that don't use cookies
       });
     } catch (error) {
       return res.status(500).json({ error: "Internal server error" });

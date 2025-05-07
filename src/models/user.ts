@@ -7,5 +7,5 @@ const userSchema = new mongoose.Schema({
   isLocked: { type: Boolean, default: false },
   refreshToken: { type: String, select: false },
 });
-const User = mongoose.model("user", userSchema);
+const User = mongoose.model("User", userSchema);
 export default User;

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import User from './user'
 const commentSchema = new mongoose.Schema(
   {
     text: {
@@ -11,12 +12,12 @@ const commentSchema = new mongoose.Schema(
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: User,
       required: true,
     },
     postId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: User,
       required: true,
     },
     likes: [{ type: Number, default: 0, min: 0 }],

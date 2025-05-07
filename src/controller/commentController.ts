@@ -4,12 +4,12 @@ import Comment from "../models/Comment";
 class commentController {
   /**
    * @desc    Create a new comment
-   * @route   POST /api/comments
+   * @route   POST /api/comments/postId
    * @access  Private
    */
   async createComment(req: Request, res: Response): Promise<any> {
-    const { text, postId: rawPostId } = req.body;
-    const postId = rawPostId?.trim(); // Trim any extra spaces
+    const { text } = req.body;
+    const postId = req.params.postId?.trim().toString(); 
     const userId = req.user?.userId; // From auth middleware
 
     if (!text || text.trim().length === 0) {
@@ -64,8 +64,9 @@ class commentController {
         postId: req.params.postId,
         status: "active",
       })
-        // .populate("userId", "username profilePicture")
+        .populate("userId", "username email")
         .sort({ createAt: -1 });
+      console.log("Raw comments:", comments);
       res
         .status(200)
         .json({ message: "Successfully retrieved  comments", Data: comments });
@@ -88,7 +89,6 @@ class commentController {
       const commentId = req.params.id;
 
       if (!commentId) {
-        console.error("Comment ID is missing in the request parameters");
         return res.status(400).json({ error: "Comment ID is required" });
       }
 
@@ -229,7 +229,7 @@ class commentController {
     try {
       const comment = await Comment.findByIdAndUpdate(
         { _id: id, userId: userId, status: "active" }, // Only delete active comment
-        {status:"deleted", deleteAt : new Date()},
+        { status: "deleted", deleteAt: new Date() },
         { new: true } // Return the updated comment
       );
 
@@ -239,8 +239,10 @@ class commentController {
           .json({ error: "Comment not found or not authorized" });
       }
 
-      //Decrement comment counts 
-      await post.findByIdAndUpdate(comment.postId, { $inc: { commentCount: -1 } });
+      //Decrement comment counts
+      await post.findByIdAndUpdate(comment.postId, {
+        $inc: { commentCount: -1 },
+      });
 
       return res
         .status(200)
