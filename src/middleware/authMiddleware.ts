@@ -21,7 +21,7 @@ class Authentication {
     // Check for empty username first
     if (!username || username.trim() === "") {
       res.status(400).json({
-        error: "Please enter a username.",
+        errors: { username: "Please enter a username." },
       });
       return;
     }
@@ -30,7 +30,7 @@ class Authentication {
     const usernameRegex = /^[a-zA-Z0-9]+$/;
     if (!usernameRegex.test(username)) {
       res.status(400).json({
-        error: "No special characters allowed in username.",
+        errors: { username: "No special characters allowed in username." },
       });
       return;
     }
@@ -38,14 +38,14 @@ class Authentication {
     // Finally check length
     if (typeof username !== "string" || username.trim().length < 3) {
       res.status(400).json({
-        error: "Username must be at least 3 characters long.",
+        errors: { username: "Username must be at least 3 characters long." },
       });
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
-      res.status(400).json({ error: "Invalid email format." });
+      res.status(400).json({ errors: { email: "Invalid email format." } });
       return;
     }
 
@@ -55,9 +55,9 @@ class Authentication {
       password.length < 8 ||
       password.length > 16
     ) {
-      res
-        .status(400)
-        .json({ error: "Password must be between 8 and 16 characters." });
+      res.status(400).json({
+        errors: { password: "Password must be between 8 and 16 characters." },
+      });
       return;
     }
 
@@ -71,12 +71,12 @@ class Authentication {
     const { email, password } = req.body;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
-      res.status(400).json({ error: "Invalid email format." });
+      res.status(400).json({ errors: { email: "Invalid email format." } });
       return;
     }
     if (!password) {
       res.status(400).json({
-        error: "Password is required",
+        errors: { password: "Password is required" },
       });
       return;
     }

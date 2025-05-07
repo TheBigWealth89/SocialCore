@@ -11,7 +11,7 @@ import {
 import config from "../config/config";
 import RefreshToken from "../models/RefreshToken";
 import { LoginError } from "../error/customErrors";
-
+import { sendEmail } from "../utils/resend";
 /**
  *
  *
@@ -20,11 +20,28 @@ import { LoginError } from "../error/customErrors";
 class AuthController {
   // Register user
   async signup(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const { username, email, password } = req.body;
+    const { username, email, password, profilePicture } = req.body;
     try {
       const existingUser = await User.findOne({ email });
       if (existingUser) {
-        res.status(400).json({ error: "User already exists!" });
+        res.status(400).json({ errors: { email: "User already exists!" } });
+        return;
+      }
+
+      const existingUsername = await User.findOne({ username });
+      if (existingUsername) {
+        res
+          .status(400)
+          .json({ errors: { username: "Username already exists!" } });
+        return;
+      }
+
+      if (!password || password.length < 6) {
+        res.status(400).json({
+          errors: {
+            password: "Password must be at least 6 characters long!",
+          },
+        });
         return;
       }
 
@@ -32,19 +49,33 @@ class AuthController {
       const hashedPassword = await hash(password, saltRound);
       console.log(`Hashed password ${hashedPassword}`);
 
-      console.log(`Comparing: ${password} vs ${hashedPassword}`);
       const isMatch = await compare(password, hashedPassword);
       console.log(`Password match: ${isMatch}`); // Should be true
 
-      const user = new User({ email, username, password: hashedPassword });
+      const user = new User({
+        email,
+        username,
+        password: hashedPassword,
+        profilePicture,
+      });
       await user.save();
-      // const tokens = generateTokens({ userId: user.id });
+      await sendEmail(username, email);
       res.status(201).json({
-        user: { id: user._id, email: user.email, username: user.username },
+        user: {
+          id: user._id,
+          email: user.email,
+          username: user.username,
+          profilePicture: user.profilePicture,
+        },
       });
     } catch (error) {
-      console.error("Register error", error);
-      next(error);
+      if (error instanceof LoginError) {
+        res.status(error.statusCode).json({
+          error: error.message,
+          code: error.statusCode,
+        });
+        return;
+      }
     }
   }
 
@@ -53,6 +84,7 @@ class AuthController {
     const { email, password } = req.body;
     try {
       if (!email || !password) {
+        //Import custom error from errors folder
         throw new LoginError("Email and Password are required", 400);
       }
 
@@ -183,7 +215,7 @@ class AuthController {
       //Set new cookie
       res.cookie("refreshToken", tokens.refreshToken, config.jwt.cookieOptions);
 
-      return res.json({
+      return res.status(200).json({
         accessToken: tokens.accessToken,
         // refreshToken: tokens.refreshToken, // For clients that don't use cookies
       });
