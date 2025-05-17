@@ -70,7 +70,8 @@ export const generateTokens = (payload: TokenPayload): TokenPair => {
 };
 
 export const removeRefreshToken = async (refreshToken: string) => {
-  return RefreshToken.deleteOne({ token: refreshToken });
+  const hashed = "TEST_" + hashedToken(refreshToken);
+  return RefreshToken.deleteOne({ token: hashed });
 };
 
 export const verifyAccessToken = async (

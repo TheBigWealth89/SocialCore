@@ -13,6 +13,11 @@ class postController {
     next: NextFunction
   ): Promise<any> {
     const { text, image, tags } = req.body;
+    const authorization = req.headers.authorization;
+    if (!authorization) {
+      console.log("Authorization header is missing");
+      return res.status(401).json({ error: "Authorization header missing" });
+    }
     const userId = req.user?.userId;
     if (!text || text.trim() === "") {
       return res.status(402).json({
@@ -27,9 +32,10 @@ class postController {
         tags: tags || [],
       });
       //populate user details
-      //   await post.populate("user", "username profilePicture");
+      // await post.populate("user", "username profilePicture");
       return res.status(200).json({
         message: "Post successfully created",
+        data: post,
       });
       //   next();
     } catch (error) {
@@ -45,11 +51,20 @@ class postController {
    */
   async getAllPosts(req: Request, res: Response): Promise<any> {
     try {
-      const posts = await Post.find().sort({ createdAt: -1 });
-      // .populate("user", "username, profilePicture")
+      const posts = await Post.find()
+        .sort({ createdAt: -1 })
+        .populate({
+          path: "userId",
+          select: "username profilePicture",
+          options: { lean: true },
+        })
+        .lean();
       return res.status(200).json({
         message: "Posts retrieved successfully",
-        Data: posts,
+        data: posts.map((post) => ({
+          ...post,
+          user: post.userId,
+        })),
       });
     } catch (error) {
       console.error("Error fetching posts:", error);
@@ -63,16 +78,26 @@ class postController {
   async getPostById(req: Request, res: Response): Promise<any> {
     try {
       const id = req.params.id;
-      const post = await Post.findById(id);
+      const post = await Post.findById(id)
+        .populate({
+          path: "userId",
+          select: "username profilePicture",
+          options: { lean: true },
+        })
+        .lean();
 
       if (!post) {
         return res.status(404).json({
           error: "Post not found",
         });
       }
-      return res
-        .status(200)
-        .json({ message: "successfully retrieved a post", Data: post });
+      return res.status(200).json({
+        message: "Successfully retrieved a post",
+        data: {
+          ...post,
+          user: post.userId,
+        },
+      });
     } catch (error) {
       console.error("Error getting post:", error);
       res.status(500).json({ error: "Failed to get a post" });
@@ -151,16 +176,16 @@ class postController {
       const alreadyLiked = post.likes.some(
         (likeId) => likeId.toString() === userId.toString()
       );
-      if (!alreadyLiked) {
+      if (alreadyLiked) {
         return res.status(400).json({ error: "Post already liked" });
       }
-    
+
       // Then add like
       post.likes.push(userId);
       await post.save();
       return res.status(200).json({ message: "Post liked successfully" });
     } catch (error) {
-      return res.status(500).json({ error: "Failed to like post" }); // Fixed typo in error message
+      return res.status(500).json({ error: "Failed to like post" });
     }
   }
 
@@ -182,8 +207,10 @@ class postController {
       }
       // if (post.likes.includes(userId.toString())) {
       // }
-      //remove the like
-      post.likes.filter((likeId) => likeId.toString() !== userId.toString());
+      //    //remove the like
+      post.likes = post.likes.filter(
+        (likeId) => likeId.toString() !== userId.toString()
+      );
       await post.save();
       res.status(200).json({ message: "Post unliked successfully" });
     } catch (error) {

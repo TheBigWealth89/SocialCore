@@ -3,12 +3,17 @@ import postController from "../controller/postController";
 import { authorization } from "../middleware/authMiddleware";
 const postRouter = Router();
 
-//**** create a new post *****/
+//****Get all posts *****/
+postRouter.get("/", postController.getAllPosts);
+
+//**** Protected routes that require authorization *****/
 postRouter.use(authorization);
+
+//**** create a new post *****/
 postRouter.post("/", postController.createPost);
 
 //****Get all posts *****/
-postRouter.get("/", postController.getAllPosts);
+// postRouter.get("/", postController.getAllPosts);
 
 //**** Get a specific post  *****
 postRouter.get("/:id", postController.getPostById);

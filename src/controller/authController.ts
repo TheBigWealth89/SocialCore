@@ -109,7 +109,13 @@ class AuthController {
       res.cookie("refreshToken", tokens.refreshToken, config.jwt.cookieOptions);
 
       res.status(201).json({
-        user: { id: user._id, email: user.email, role: "user" },
+        user: {
+          id: user._id,
+          email: user.email,
+          username: user.username,
+          profilePicture: user.profilePicture,
+          role: "user",
+        },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       });
