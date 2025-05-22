@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import Post from "../models/Post";
+import { PostCreatePayload, contentBlock } from "../types/post.types";
 
 class postController {
   /**
@@ -7,32 +8,50 @@ class postController {
    * @route   POST /api/posts
    * @access  Private
    */
+
   async createPost(
-    req: Request,
-    res: Response,
-    next: NextFunction
+    req: Request<{}, {}, PostCreatePayload>,
+    res: Response
   ): Promise<any> {
-    const { text, image, tags } = req.body;
-    const authorization = req.headers.authorization;
-    if (!authorization) {
-      console.log("Authorization header is missing");
-      return res.status(401).json({ error: "Authorization header missing" });
-    }
+    //Get data from request
+    const { title, content, tags } = req.body;
     const userId = req.user?.userId;
-    if (!text || text.trim() === "") {
-      return res.status(402).json({
-        error: "Text is required",
-      });
-    }
+
     try {
+      if (!userId) {
+        return res
+          .status(401)
+          .json({ error: "You must logged in to create a post" });
+      }
+      if (!title || title.trim() === "") {
+        return res.status(400).json({
+          error: "Post title is required",
+        });
+      }
+      if (!content || content.length === 0) {
+        return res.status(400).json({ error: "Post content cannot be empty" });
+      }
+      //validate each content block
+      for (const block of content) {
+        if (!["text", "image", "video"].includes(block.type)) {
+          return res
+            .status(400)
+            .json({ error: `Invalid content type: ${block.type}` });
+        }
+
+        if (!block.content || block.content.trim() === "") {
+          return res.status(400).json({ error: "Content cannot be empty" });
+        }
+      }
+
+      // 4. Create the post
       const post = await Post.create({
-        text,
-        image: image || "",
-        userId: userId,
+        title,
+        content,
+        userId,
         tags: tags || [],
       });
-      //populate user details
-      // await post.populate("user", "username profilePicture");
+
       return res.status(200).json({
         message: "Post successfully created",
         data: post,
@@ -94,8 +113,11 @@ class postController {
       return res.status(200).json({
         message: "Successfully retrieved a post",
         data: {
-          ...post,
-          user: post.userId,
+          title: post.title,
+          content: post.image || [], // Ensure content exists
+          tags: post.tags || [],
+          author: post.userId,
+          createdAt: post.createdAt,
         },
       });
     } catch (error) {
