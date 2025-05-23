@@ -10,79 +10,6 @@ declare global {
 
 import jwt from "jsonwebtoken";
 import { verifyAccessToken } from "../utils/tokenUtils";
-class Authentication {
-  async registerInput(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
-    const { username, email, password } = req.body;
-
-    // Check for empty username first
-    if (!username || username.trim() === "") {
-      res.status(400).json({
-        errors: { username: "Please enter a username." },
-      });
-      return;
-    }
-
-    // Then check for special characters
-    const usernameRegex = /^[a-zA-Z0-9]+$/;
-    if (!usernameRegex.test(username)) {
-      res.status(400).json({
-        errors: { username: "No special characters allowed in username." },
-      });
-      return;
-    }
-
-    // Finally check length
-    if (typeof username !== "string" || username.trim().length < 3) {
-      res.status(400).json({
-        errors: { username: "Username must be at least 3 characters long." },
-      });
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      res.status(400).json({ errors: { email: "Invalid email format." } });
-      return;
-    }
-
-    if (
-      !password ||
-      typeof password !== "string" ||
-      password.length < 8 ||
-      password.length > 16
-    ) {
-      res.status(400).json({
-        errors: { password: "Password must be between 8 and 16 characters." },
-      });
-      return;
-    }
-
-    next(); // Proceed to the next middleware or controller
-  }
-  async loginInput(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
-    const { email, password } = req.body;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      res.status(400).json({ errors: { email: "Invalid email format." } });
-      return;
-    }
-    if (!password) {
-      res.status(400).json({
-        errors: { password: "Password is required" },
-      });
-      return;
-    }
-    next();
-  }
-}
 
 export const authorization = async (
   req: Request,
@@ -140,5 +67,3 @@ export const authorization = async (
     sendResponse(401, message);
   }
 };
-
-export default new Authentication();

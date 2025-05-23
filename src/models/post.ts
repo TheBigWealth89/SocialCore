@@ -8,9 +8,8 @@ const contentBlockSchema = new mongoose.Schema({
 });
 const postSchema = new mongoose.Schema({
   title: { type: String, trim: true, required: true, maxlength: 100 },
-  content: [contentBlockSchema], // Array of  contents mixed blocks
+  blocks: [contentBlockSchema], // Array of  contents mixed blocks
   userId: { type: mongoose.Schema.Types.ObjectId, ref: User, required: true },
-  // text: { type: String },
   image: { type: String, default: "" },
   commentCount: { type: Number, default: 0 },
   tags: { type: [String], default: [] },
@@ -25,4 +24,4 @@ postSchema.pre("save", function (next) {
 });
 
 const Post = mongoose.model("Post ", postSchema);
-export default Post
+export default Post;

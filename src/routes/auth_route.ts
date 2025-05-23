@@ -1,12 +1,12 @@
 import { Router } from "express";
 import AuthController from "../controller/authController";
-import Authentication, { authorization } from "../middleware/authMiddleware"
+import  { authorization } from "../middleware/authMiddleware"
 
 const authRouter = Router();
 //**** signUp route *****/
-authRouter.post("/register", Authentication.registerInput, AuthController.signup);
+authRouter.post("/register", AuthController.signup);
 //**** login route *****/
-authRouter.post("/login",Authentication.loginInput, AuthController.login);
+authRouter.post("/login",AuthController.login);
 //**** logout route *****/
 authRouter.post("/logout", authorization, AuthController.logout);
 //**** token rotation route *****/

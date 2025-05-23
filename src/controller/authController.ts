@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import User from "../models/user";
 import { hash, compare } from "bcrypt";
 import {
@@ -12,6 +13,7 @@ import config from "../config/config";
 import RefreshToken from "../models/RefreshToken";
 import { LoginError } from "../error/customErrors";
 import { sendEmail } from "../utils/resend";
+import { MongoServerError } from "mongodb";
 /**
  *
  *
@@ -20,62 +22,53 @@ import { sendEmail } from "../utils/resend";
 class AuthController {
   // Register user
   async signup(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const { username, email, password, profilePicture } = req.body;
+    const { name, username, email, password, profilePicture } = req.body;
     try {
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        res.status(400).json({ errors: { email: "User already exists!" } });
-        return;
-      }
-
-      const existingUsername = await User.findOne({ username });
-      if (existingUsername) {
-        res
-          .status(400)
-          .json({ errors: { username: "Username already exists!" } });
-        return;
-      }
-
-      if (!password || password.length < 6) {
-        res.status(400).json({
-          errors: {
-            password: "Password must be at least 6 characters long!",
-          },
-        });
-        return;
-      }
-
       const saltRound = 10;
       const hashedPassword = await hash(password, saltRound);
-      console.log(`Hashed password ${hashedPassword}`);
-
-      const isMatch = await compare(password, hashedPassword);
-      console.log(`Password match: ${isMatch}`); // Should be true
 
       const user = new User({
         email,
+        name,
         username,
         password: hashedPassword,
         profilePicture,
       });
+
       await user.save();
+
       await sendEmail(username, email);
+
       res.status(201).json({
         user: {
           id: user._id,
           email: user.email,
+          name: user.name,
           username: user.username,
           profilePicture: user.profilePicture,
         },
       });
     } catch (error) {
-      if (error instanceof LoginError) {
-        res.status(error.statusCode).json({
-          error: error.message,
-          code: error.statusCode,
-        });
+      if (error instanceof mongoose.Error.ValidationError) {
+        const errors = Object.values(error.errors).reduce<
+          Record<string, string>
+        >((acc, { path, message }) => {
+          acc[path] = message;
+          return acc;
+        }, {});
+        res.status(400).json({ errors });
         return;
       }
+
+      // Handle duplicate key errors (MongoDB error code 11000)
+      if (error instanceof MongoServerError && error.code === 11000) {
+        const field = Object.keys(error.keyPattern)[0];
+        res.status(400).json({
+          errors: { [field]: `${field} already exists` },
+        });
+      }
+      // Forward to Express error handler
+      next(error);
     }
   }
 
@@ -92,10 +85,7 @@ class AuthController {
       if (!user) {
         throw new LoginError("Invalid credentials", 401);
       }
-      const isMatch = await compare(password, user.password);
-      if (!isMatch) {
-        throw new LoginError("Invalid credentials", 403);
-      }
+
       await User.updateOne({ email }, { $set: { isLocked: false } });
 
       if (user.isLocked) {
