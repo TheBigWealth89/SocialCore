@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import User from "../models/user";
+import User from "./user.model";
 
 const contentBlockSchema = new mongoose.Schema({
   type: { type: String, enum: ["text", "image", "video"], required: true },

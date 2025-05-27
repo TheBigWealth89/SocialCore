@@ -7,7 +7,7 @@ import RefreshToken from "../models/RefreshToken";
 import crypto from "crypto";
 interface TokenPayload {
   userId: Types.ObjectId;
-  role?: string; //user or admin
+  roles?: string[]; 
 }
 
 interface TokenPair {

@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from "express";
-import mongoose from "mongoose";
-import User from "../models/user";
+import User from "../models/user.model";
+import { UserDTO } from "../types/user.types";
 import { hash, compare } from "bcrypt";
+import logger from "../utils/logger";
 import {
   generateTokens,
   addToBlacklist,
@@ -13,7 +14,6 @@ import config from "../config/config";
 import RefreshToken from "../models/RefreshToken";
 import { LoginError } from "../error/customErrors";
 import { sendEmail } from "../utils/resend";
-import { MongoServerError } from "mongodb";
 /**
  *
  *
@@ -39,91 +39,115 @@ class AuthController {
 
       await sendEmail(username, email);
 
+      const userResponse: UserDTO = {
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+        username: user.username,
+        profilePicture: user.profilePicture,
+        createAt: user.createAt,
+      };
+
       res.status(201).json({
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          username: user.username,
-          profilePicture: user.profilePicture,
-        },
+        user: userResponse,
       });
     } catch (error) {
-      if (error instanceof mongoose.Error.ValidationError) {
-        const errors = Object.values(error.errors).reduce<
-          Record<string, string>
-        >((acc, { path, message }) => {
-          acc[path] = message;
-          return acc;
-        }, {});
-        res.status(400).json({ errors });
-        return;
-      }
-
-      // Handle duplicate key errors (MongoDB error code 11000)
-      if (error instanceof MongoServerError && error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
-        res.status(400).json({
-          errors: { [field]: `${field} already exists` },
-        });
-      }
-      // Forward to Express error handler
       next(error);
     }
   }
 
   //Login user
-  async login(req: Request, res: Response): Promise<any> {
-    const { email, password } = req.body;
-    try {
-      if (!email || !password) {
-        //Import custom error from errors folder
-        throw new LoginError("Email and Password are required", 400);
-      }
 
-      const user = await User.findOne({ email }).select("+password");
+  async login(req: Request, res: Response, next: NextFunction): Promise<any> {
+    const identifier =
+      req.body.identifier || req.body.username || req.body.email;
+    const password = req.body.password;
+
+    try {
+      const MAX_FAILED_ATTEMPTS = 5;
+      const LOCK_DURATION_TIME = 2;
+
+      if (!identifier || !password) {
+        //Import custom error from errors folder
+        throw new LoginError(
+          "Username or Email and Password are required",
+          400
+        );
+      }
+      const cleanIdentifier = identifier.toLowerCase().trim();
+
+      const user = await User.findOne({
+        $or: [{ email: cleanIdentifier }, { username: cleanIdentifier }],
+      }).select("+password +failedLoginAttempts +lockUntil");
+      console.log("User exists", user);
+      logger.info(user);
+      // Timing attack-safe comparison
+      const dummyHash = await hash("dummy", 10);
       if (!user) {
+        //This ensures the compare function always runs, preventing timing attacks.
+        await compare(password, dummyHash);
         throw new LoginError("Invalid credentials", 401);
       }
 
-      await User.updateOne({ email }, { $set: { isLocked: false } });
-
-      if (user.isLocked) {
-        throw new LoginError("Account temporarily locked", 401);
+      if (user.lockUntil && user.lockUntil > new Date()) {
+        const minutesLeft = Math.ceil(
+          (user.lockUntil.getTime() - new Date().getTime()) / 60000
+        );
+        throw new LoginError(
+          `Account locked due to too many attempts. Try again in ${minutesLeft} minutes`,
+          403
+        );
       }
 
+      const isMatch = await compare(password, user.password!);
+      if (!isMatch) {
+        user.failedLoginAttempts += 1;
+        if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
+          user.lockUntil = new Date(
+            Date.now() + LOCK_DURATION_TIME * 60 * 1000
+          );
+          user.isLocked = true;
+          user.failedLoginAttempts = 0;
+          await user.save();
+          throw new LoginError(
+            `Invalid credentials. Account locked for ${LOCK_DURATION_TIME} minutes`
+          );
+        }
+        await user.save(); //Save changes
+
+        throw new LoginError("Invalid credentials", 401);
+      }
+      //Handle correct password (Login Successful)
+      //Reset login attempts and duration
+      user.failedLoginAttempts = 0;
+      user.lockUntil = null;
+
       // Generate tokens with proper expiration
-      const tokens = generateTokens({ userId: user._id, role: "user" });
+      const tokens = generateTokens({ userId: user._id, roles: user.roles });
+
+
+      await user.save(); // Save everything at once attempts reset + token
 
       await saveRefreshToken(user._id, tokens.refreshToken);
+
+      // Set HTTP-only cookie
       res.cookie("refreshToken", tokens.refreshToken, config.jwt.cookieOptions);
 
-      res.status(201).json({
-        user: {
-          id: user._id,
-          email: user.email,
-          username: user.username,
-          profilePicture: user.profilePicture,
-          role: "user",
-        },
+      const loginResponse: UserDTO = {
+        name: user.name,
+        _id: user._id,
+        email: user.email,
+        username: user.username,
+        profilePicture: user.profilePicture,
+      };
+
+      res.status(200).json({
+        user: loginResponse,
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       });
     } catch (error) {
-      if (error instanceof LoginError) {
-        return res.status(error.statusCode).json({
-          error: error.message,
-          code: error.statusCode,
-        });
-      }
-
-      console.error("Login error:", error);
-      res.status(500).json({
-        error:
-          process.env.NODE_ENV === "development"
-            ? (error as Error).message
-            : "Authentication failed",
-      });
+      next(error);
     }
   }
 
@@ -202,7 +226,7 @@ class AuthController {
       //Generate new tokens
       const tokens = generateTokens({
         userId: decoded.userId,
-        role: decoded.role || "user",
+        roles: decoded.roles,
       });
 
       //Save new refresh token (invalidates old one)
@@ -217,6 +241,21 @@ class AuthController {
       });
     } catch (error) {
       return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  async getAllUsers(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const users = await User.find();
+      res.status(200).json({
+        users: users,
+      });
+    } catch (error) {
+      next(error);
     }
   }
 }

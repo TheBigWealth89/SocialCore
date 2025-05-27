@@ -3,10 +3,11 @@ import postRoutes from "./routes/post_route";
 import followRoutes from "./routes/follow_route";
 import commentRoutes from "./routes/comment_route";
 import authRoutes from "./routes/auth_route";
+import adminRoutes from "./routes/admin_routes";
 import connectDB from "./lib/db";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import RedisService from "./services/redis.services";
+import redisServices from "./services/redis.services";
 import cors from "cors";
 
 dotenv.config();
@@ -24,14 +25,15 @@ app.use(
 
 connectDB();
 
-const redisService = new RedisService();
+
 (async () => {
-  await redisService.connect();
+  await redisServices.connect();
 })();
 
 app.use("/api/posts", postRoutes);
 app.use("/api/follow", followRoutes);
 app.use("/api/comments", commentRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 
 export default app;

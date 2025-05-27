@@ -36,6 +36,7 @@
     "mongoose": "^8.13.0",
     "redis": "^4.7.0",
     "resend": "^4.5.1",
-    "tough-cookie": "^5.1.2"
+    "tough-cookie": "^5.1.2",
+    "winston": "^3.17.0"
   }
 }

@@ -4,7 +4,7 @@ import  { authorization } from "../middleware/authMiddleware"
 
 const authRouter = Router();
 //**** signUp route *****/
-authRouter.post("/register", AuthController.signup);
+authRouter.post("/signup", AuthController.signup);
 //**** login route *****/
 authRouter.post("/login",AuthController.login);
 //**** logout route *****/

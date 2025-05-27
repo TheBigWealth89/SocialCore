@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import User from "./user"
+import User from "./user.model";
 const followSchema = new mongoose.Schema(
   {
     //who is make the following
